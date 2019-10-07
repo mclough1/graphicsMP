@@ -25,6 +25,7 @@
 // include GLM libraries and matrix functions
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <math.h>				// for cos(), sin() functionality
 #include <stdio.h>			// for printf functionality
@@ -53,7 +54,7 @@ glm::vec3 camPos;            						// camera position in cartesian coordinates
 float cameraTheta, cameraPhi, camRad = 5.0f;        // camera DIRECTION in spherical coordinates
 glm::vec3 camDir; 			                    	// camera DIRECTION in cartesian coordinates
 
-std::vector<glm::vec3> controlPoints;
+std::vector<std::vector<glm::vec3>> controlPoints;
 
 bool ctrlPressed = false;
 
@@ -71,19 +72,21 @@ GLuint environmentDL;                       		// display list for the 'city'
 
 bool loadControlPoints( std::string filename ) {
 	std::ifstream in = std::ifstream(filename);
-	int numPoints = 0;
+	int numPatches = 0;
 	if(in) {
-		in >> numPoints;
-		for(int i = 0; i < numPoints; i++){
-			glm::vec3 point;
-			char waste;
-			if(in >> point.x >> waste >> point.y >> waste >> point.z) {
-				controlPoints.push_back(point);
-			} else {
-				return false;
-			}
+		in >> numPatches;
+		controlPoints.resize(numPatches);
+		for(int i = 0; i < numPatches; i++){
+			for(int j = 0; j < 16; j++){
+				glm::vec3 point;
+				if(in >> point.x >> point.y >> point.z) {
+					controlPoints[i].push_back(point);
+					std::cout << point.x << " " << point.y << " " << point.z << std::endl;
+				} else {
+					return false;
+				}
+			}	
 		}
-		
 		return true;
 	} else {
 		return false;
@@ -120,9 +123,9 @@ void recomputeOrientation() {
 ////////////////////////////////////////////////////////////////////////////////
 glm::vec3 evaluateBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t ) {
 
-	float x = pow((1-t), 3) * p0.x + 3* pow((1-t),2) * t * p1.x + 3 * (1-t) * pow(t,2) * p2.x + pow(t,3) * p3.x;
-	float y = pow((1-t), 3) * p0.y + 3* pow((1-t),2) * t * p1.y + 3 * (1-t) * pow(t,2) * p2.y + pow(t,3) * p3.y;
-	float z = pow((1-t), 3) * p0.z + 3* pow((1-t),2) * t * p1.z + 3 * (1-t) * pow(t,2) * p2.z + pow(t,3) * p3.z;
+	float x = pow((1-t), 3) * p0.x + 3* pow((1-t),2) * t * p1.x + 3 * (1-t) * t * t * p2.x + t * t * t * p3.x;
+	float y = pow((1-t), 3) * p0.y + 3* pow((1-t),2) * t * p1.y + 3 * (1-t) * t * t * p2.y + t * t * t * p3.y;
+	float z = pow((1-t), 3) * p0.z + 3* pow((1-t),2) * t * p1.z + 3 * (1-t) * t * t * p2.z + t * t * t * p3.z;
 	return glm::vec3(x, y, z);
 }
 
@@ -133,10 +136,12 @@ glm::vec3 evaluateBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::ve
 //
 ////////////////////////////////////////////////////////////////////////////////
 void renderBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float resolution ) {
+	glBegin(GL_LINE_STRIP);
 	for(float i = 0.0f; i < 1.0f; i+=resolution){
 		glm::vec3 point = evaluateBezierCurve(p0, p1, p2, p3, i);
 		glVertex3f(point.x, point.y, point.z);
 	}
+	glEnd();
 }
 
 //*************************************************************************************
@@ -232,11 +237,41 @@ static void mouse_button_callback( GLFWwindow *window, int button, int action, i
 //
 // Rendering / Drawing Functions - this is where the magic happens!
 
-// drawGrid() //////////////////////////////////////////////////////////////////
-//
-//  Function to draw a grid in the XZ-Plane using OpenGL 2D Primitives (GL_LINES)
-//
-////////////////////////////////////////////////////////////////////////////////
+void drawFloor() {
+	std::vector<std::vector<glm::vec3>> floorPoints;
+	
+	glColor3ub(255,255,255);
+	glPointSize(10.0f);
+	for(int i = 0; i < controlPoints.size(); i++) {
+		for(float t = 0; t <= 1.0f; t+= .01){
+			std::vector<glm::vec3> points;
+			for(float j = 0.0f; j <= 1.0f; j+= .01){
+				points.push_back(evaluateBezierCurve(
+					evaluateBezierCurve(controlPoints[i][0], controlPoints[i][1], controlPoints[i][2], controlPoints[i][3], j),
+					evaluateBezierCurve(controlPoints[i][4], controlPoints[i][5], controlPoints[i][6], controlPoints[i][7], j),
+					evaluateBezierCurve(controlPoints[i][8], controlPoints[i][9], controlPoints[i][10], controlPoints[i][11], j),
+					evaluateBezierCurve(controlPoints[i][12], controlPoints[i][13], controlPoints[i][14], controlPoints[i][15], j),
+					t));
+			}
+			floorPoints.push_back(points);
+		}
+	}	
+	glDisable(GL_LIGHTING);
+	
+		for(int i = 0; i < floorPoints.size() - 1; i++){
+			glBegin(GL_TRIANGLE_STRIP);
+			for(int j = 0; j < floorPoints[i].size() - 1; j++){
+				glVertex3fv(glm::value_ptr(floorPoints[i][j]));
+				glVertex3fv(glm::value_ptr(floorPoints[i][j+1]));
+				glVertex3fv(glm::value_ptr(floorPoints[i+1][j]));
+				glVertex3fv(glm::value_ptr(floorPoints[i+1][j+1]));
+			}
+			glEnd();
+		}
+	glEnable(GL_LIGHTING);
+
+}
+
 void drawGrid() {
 	/*
      *	We will get to why we need to do this when we talk about lighting,
@@ -261,33 +296,6 @@ void drawGrid() {
 	glEnable( GL_LIGHTING );
 }
 
-// drawCity() //////////////////////////////////////////////////////////////////
-//
-//  Function to draw a random city using CSCI441 3D Cubes
-//
-////////////////////////////////////////////////////////////////////////////////
-void drawCity() {
-	for(int i = -50; i <= 50; i++){
-		for(int j = -50; j <= 50; j++){
-			if(getRand() < 0.2f && i % 2 == 0 && j%2 == 0){
-					float z = getRand() * 10;
-					glColor3f(getRand(), getRand(), getRand());
-					glm::mat4 trans = glm::translate( glm::mat4(1.0f), glm::vec3( i, z/2, j ) );
-					glm::mat4 scale = glm::scale( glm::mat4(1.0f), glm::vec3(1.0f, z, 1.0f));
-					glMultMatrixf( &trans[0][0] );
-					glMultMatrixf( &scale[0][0]);
-					CSCI441::drawSolidCube(1);
-					glMultMatrixf( &(glm::inverse( scale))[0][0] );
-					glMultMatrixf( &(glm::inverse( trans))[0][0] );
-
-					glColor3f(1.0f,1.0f,1.0f);
-					
-			}
-		}
-	}
-
-}
-
 // generateEnvironmentDL() /////////////////////////////////////////////////////
 //
 //  This function creates a display list with the code to draw a simple
@@ -301,9 +309,8 @@ void drawCity() {
 void generateEnvironmentDL() {
 	environmentDL = glGenLists(1);
 	glNewList(environmentDL, GL_COMPILE);
-		drawGrid();
-		drawCity();
-
+		drawFloor();
+		//drawGrid();
 	glEndList();
 
 }
@@ -319,33 +326,6 @@ void generateEnvironmentDL() {
 //
 void renderScene(void)  {
 	glCallList(environmentDL);
-	
-		glBegin(GL_LINE_STRIP);
-		glColor3ub(255,255,0);
-		for(int i = 0; i < controlPoints.size(); i++){
-			
-			glVertex3f(controlPoints[i].x, controlPoints[i].y, controlPoints[i].z);
-		}
-		glEnd();
-		glEnable(GL_LIGHTING);
-		glColor3ub(0,255,0);
-		for(int i = 0; i < controlPoints.size(); i++){
-			glm::mat4 circTrans = glm::translate( glm::mat4(1.0f), glm::vec3(controlPoints[i].x, controlPoints[i].y, controlPoints[i].z));
-			glMultMatrixf( &circTrans[0][0] );
-			CSCI441::drawSolidSphere(.2,10,10);
-			glMultMatrixf( &(glm::inverse( circTrans))[0][0] );
-		}
-		glDisable( GL_LIGHTING);
-	
-		glColor3ub(0, 0, 255);
-		glBegin(GL_LINE_STRIP);
-		
-		for(int i = 0; i < controlPoints.size() - 3; i+=3){
-			renderBezierCurve(controlPoints[i], controlPoints[i+1],controlPoints[i+2], controlPoints[i+3], .01f);		
-		}
-		glEnd();
-	
-	glEnable( GL_LIGHTING );
 }
 
 //*************************************************************************************
@@ -467,15 +447,14 @@ void setupScene() {
 //
 int main( int argc, char *argv[] ) {
 	// GLFW sets up our OpenGL context so must be done first
+	std::string file;
+	if(!loadControlPoints("theWorld.txt")) {
+		std::cerr << "Error code: " << strerror(errno);
+	}
 	GLFWwindow *window = setupGLFW();	// initialize all of the GLFW specific information releated to OpenGL and our window
 	setupOpenGL();										// initialize all of the OpenGL specific information
 	setupScene();											// initialize objects in our scene
-	std::string file;
-	std::cout << "File of control points";
-	std::cin >> file;
-	if(!loadControlPoints(file)) {
-		std::cerr << "Error code: " << strerror(errno);
-	}
+	
 	//  This is our draw loop - all rendering is done here.  We use a loop to keep the window open
 	//	until the user decides to close the window and quit the program.  Without a loop, the
 	//	window will display once and then the program exits.
