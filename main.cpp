@@ -118,22 +118,31 @@ void recomputeOrientation() {
 //
 ////////////////////////////////////////////////////////////////////////////////
 glm::vec3 tangentBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t ) {
-    return 3.0f * (float)pow(1-t, 2) * p0 + 6.0f * (float)pow(1-t, 1) * t * p1 + 6.0f * (1-t) * (float)pow(t,1) * p2 + 3.0f * (float)pow(t, 2) * p3;
+    return -3.0f * (float)pow(1-t, 2) * p0 + 3.0f * (float)pow(1-t, 2) * p1 - 6.0f * t * (1-t) * p1 - 3.0f * (float)pow(t, 2) * p2 + 6.0f * t * (1-t) * p2 + 3.0f * (float)pow(t, 2) * p3;
 }
 
 // getRotMatrix() //////////////////////////////////////////////////////////
 //
 //	Returns the rotation matrix between two vectors
-//  Might change this to return the angles depending on which is easier
 //
 ////////////////////////////////////////////////////////////////////////////////
-glm::mat4 getRotMatrix(glm::vec3 current, glm::vec3 end) {
-    glm::vec3 axis = glm::normalize(glm::cross(current, end));
-    float a = acos(glm::dot(current, end));
-    float c = cos(a);
-    float s = sin(a);
-    glm::vec4 vec1 = glm::vec4(pow(a.x,2) * (1-c));
+glm::mat4 getRotMatrix(glm::vec3 from, glm::vec3 to) {
+    glm::vec3 axis = glm::normalize(glm::cross(from, to));
+    for (int i = 0; i < 3; i++) {
+        std::cout << axis[i] << std::endl;
+    }
 
+    float angle = acos(glm::dot(from, to)); //this is wrong
+    //rot[3][3] = 0;
+    /*
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            std::cout << i << " " << j << " : " << rot[i][j] << std::endl;
+        }
+    }
+    */
+
+    return rot;
 }
 
 // evaluateBezierCurve() //////////////////////////////////////////////////////////
@@ -145,6 +154,8 @@ glm::vec3 evaluateBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::ve
 	return (float)pow(1-t, 3) * p0 + 3.0f * (float)pow(1-t, 2) * t * p1 + 3.0f * (1-t) * (float)pow(t,2) * p2 + (float)pow(t, 3) * p3;
 }
 
+void drawTrack();
+
 // renderBezierCurve() //////////////////////////////////////////////////////////
 //
 // Responsible for drawing a Bezier Curve as defined by four control points.
@@ -154,7 +165,14 @@ glm::vec3 evaluateBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::ve
 void renderBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float resolution ) {
 	for(float i = 0.0f; i < 1.0f; i+=resolution){
 		glm::vec3 point = evaluateBezierCurve(p0, p1, p2, p3, i);
-		glVertex3f(point.x, point.y, point.z);
+
+		glm::mat4 rotMtx = getRotMatrix(glm::vec3(1,0,0), tangentBezierCurve(p0, p1, p2, p3, i));
+        glm::mat4 transMtx = glm::translate(glm::mat4(1.0f), point);
+        glMultMatrixf( &transMtx[0][0] );
+        glMultMatrixf( &rotMtx[0][0] );
+		drawTrack();
+        glMultMatrixf( &( glm::inverse( rotMtx ) )[0][0] );
+        glMultMatrixf( &( glm::inverse( transMtx ) )[0][0] );
 	}
 }
 
@@ -327,7 +345,11 @@ void generateEnvironmentDL() {
 
 }
 
-//Draws the teapot on the front of the car
+//Draw coaster track piece
+void drawTrack() {
+    glColor3f(1.0f,0,0);
+    CSCI441::drawSolidCube(1);
+}
 
 
 //
@@ -356,13 +378,13 @@ void renderScene(void)  {
 		}
 		glDisable( GL_LIGHTING);
 	
-		glColor3ub(0, 0, 255);
-		glBegin(GL_LINE_STRIP);
+		//glColor3ub(0, 0, 255);
+		//glBegin(GL_LINE_STRIP);
 		
 		for(int i = 0; i < controlPoints.size() - 1; i+=4){
 			renderBezierCurve(controlPoints[i], controlPoints[i+1],controlPoints[i+2], controlPoints[i+3], .01f);
 		}
-		glEnd();
+		//glEnd();
 	
 	glEnable( GL_LIGHTING );
 }
