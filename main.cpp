@@ -207,8 +207,8 @@ static void cursor_callback( GLFWwindow *window, double x, double y ) {
 		cameraPhi += .005 * (mousePos.y - y);
 		recomputeOrientation();     // update camera (x,y,z) based on (theta,phi)
 	} else if( leftMouseButton == GLFW_PRESS && ctrlPressed){
-		camRad += .005 * (mousePos.y - y);
-		recomputeOrientation(); 
+		camRad += .05 * (mousePos.y - y);
+		recomputeOrientation();
 	}
 
 	mousePos.x = x;
@@ -245,7 +245,7 @@ void drawGrid() {
      *	and then reenable it for use with the CSCI441 3D Objects.
      */
 	glDisable( GL_LIGHTING );
-	glColor3ub(255,255,255);
+	glColor3ub(55,55,55);
 	glBegin(GL_LINES);
 		for(float i = -50.0f; i <= 50.0f; i++){
 			glVertex3f(-50.0f, 0.0f, i);
@@ -302,7 +302,7 @@ void generateEnvironmentDL() {
 	environmentDL = glGenLists(1);
 	glNewList(environmentDL, GL_COMPILE);
 		drawGrid();
-		drawCity();
+		//drawCity();
 
 	glEndList();
 
@@ -340,8 +340,8 @@ void renderScene(void)  {
 		glColor3ub(0, 0, 255);
 		glBegin(GL_LINE_STRIP);
 		
-		for(int i = 0; i < controlPoints.size() - 3; i+=3){
-			renderBezierCurve(controlPoints[i], controlPoints[i+1],controlPoints[i+2], controlPoints[i+3], .01f);		
+		for(int i = 0; i < controlPoints.size() - 1; i+=4){
+			renderBezierCurve(controlPoints[i], controlPoints[i+1],controlPoints[i+2], controlPoints[i+3], .01f);
 		}
 		glEnd();
 	
