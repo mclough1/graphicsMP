@@ -112,6 +112,29 @@ void recomputeOrientation() {
 	camPos = camRad * glm::vec3(x, y, z);
 }
 
+// tangentBezierCurve() //////////////////////////////////////////////////////////
+//
+//	Returns the tangent at a point on the curve
+//
+////////////////////////////////////////////////////////////////////////////////
+glm::vec3 tangentBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t ) {
+    return 3.0f * (float)pow(1-t, 2) * p0 + 6.0f * (float)pow(1-t, 1) * t * p1 + 6.0f * (1-t) * (float)pow(t,1) * p2 + 3.0f * (float)pow(t, 2) * p3;
+}
+
+// getRotMatrix() //////////////////////////////////////////////////////////
+//
+//	Returns the rotation matrix between two vectors
+//  Might change this to return the angles depending on which is easier
+//
+////////////////////////////////////////////////////////////////////////////////
+glm::mat4 getRotMatrix(glm::vec3 current, glm::vec3 end) {
+    glm::vec3 axis = glm::normalize(glm::cross(current, end));
+    float a = acos(glm::dot(current, end));
+    float c = cos(a);
+    float s = sin(a);
+    glm::vec4 vec1 = glm::vec4(pow(a.x,2) * (1-c));
+
+}
 
 // evaluateBezierCurve() //////////////////////////////////////////////////////////
 //
@@ -119,11 +142,7 @@ void recomputeOrientation() {
 //
 ////////////////////////////////////////////////////////////////////////////////
 glm::vec3 evaluateBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t ) {
-
-	float x = pow((1-t), 3) * p0.x + 3* pow((1-t),2) * t * p1.x + 3 * (1-t) * pow(t,2) * p2.x + pow(t,3) * p3.x;
-	float y = pow((1-t), 3) * p0.y + 3* pow((1-t),2) * t * p1.y + 3 * (1-t) * pow(t,2) * p2.y + pow(t,3) * p3.y;
-	float z = pow((1-t), 3) * p0.z + 3* pow((1-t),2) * t * p1.z + 3 * (1-t) * pow(t,2) * p2.z + pow(t,3) * p3.z;
-	return glm::vec3(x, y, z);
+	return (float)pow(1-t, 3) * p0 + 3.0f * (float)pow(1-t, 2) * t * p1 + 3.0f * (1-t) * (float)pow(t,2) * p2 + (float)pow(t, 3) * p3;
 }
 
 // renderBezierCurve() //////////////////////////////////////////////////////////
