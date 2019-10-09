@@ -128,19 +128,9 @@ glm::vec3 tangentBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec
 ////////////////////////////////////////////////////////////////////////////////
 glm::mat4 getRotMatrix(glm::vec3 from, glm::vec3 to) {
     glm::vec3 axis = glm::normalize(glm::cross(from, to));
-    for (int i = 0; i < 3; i++) {
-        std::cout << axis[i] << std::endl;
-    }
 
-    float angle = acos(glm::dot(from, to)); //this is wrong
-    //rot[3][3] = 0;
-    /*
-    for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < 4; j++) {
-            std::cout << i << " " << j << " : " << rot[i][j] << std::endl;
-        }
-    }
-    */
+    float angle = acos(glm::dot(normalize(from), normalize(to))); //this is wrong
+	glm::mat4 rot = glm::rotate(glm::mat4(1.0f), angle, axis);
 
     return rot;
 }
