@@ -25,6 +25,7 @@
 // include GLM libraries and matrix functions
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <math.h>				// for cos(), sin() functionality
 #include <stdio.h>			// for printf functionality
@@ -34,6 +35,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include "hero.h"
+#include "dio.h"
 
 //*************************************************************************************
 //
@@ -49,15 +52,32 @@ int windowWidth = 640, windowHeight = 480;
 int leftMouseButton;    	 						// status of the mouse button
 glm::vec2 mousePos;			              		  	// last known X and Y of the mouse
 
-glm::vec3 camPos;            						// camera position in cartesian coordinates
-float cameraTheta, cameraPhi, camRad = 5.0f;        // camera DIRECTION in spherical coordinates
-glm::vec3 camDir; 			                    	// camera DIRECTION in cartesian coordinates
+glm::vec3 arcCamPos;            						// camera position in cartesian coordinates
+float arcCameraTheta, arcCameraPhi;               		// camera DIRECTION in spherical coordinates
+float cameraP, zoom;								// camera Distance from object of interest
 
-std::vector<glm::vec3> controlPoints;
+glm::vec3 freeCamPos;            						// camera position in cartesian coordinates
+float freeCameraTheta, freeCameraPhi;               		// camera DIRECTION in spherical coordinates
+glm::vec3 freeCamDir; 			                    	// camera DIRECTION in cartesian coordinates
+float freeCamSpeed;
+glm::vec3 freeCamLookAt;
 
-bool ctrlPressed = false;
+Hero* heroFocus;
+glm::vec3* lookAt;
+glm::vec3* camPos;
+
+bool freeCamOn = false;
+bool firstPersonOn = false;			                    	// camera DIRECTION in cartesian coordinates
+
+bool zoomOn = false;								// true if zoom mode is on
+
+vector<vector<glm::vec3>> controlSurfacePoints;
+
+std::vector<glm::vec3> controlCurvePoints;
 
 GLuint environmentDL;                       		// display list for the 'city'
+
+Dio dio;
 
 //*************************************************************************************
 //
@@ -69,7 +89,7 @@ GLuint environmentDL;                       		// display list for the 'city'
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-bool loadControlPoints( std::string filename ) {
+bool loadControlCurvePoints( std::string filename ) {
 	std::ifstream in = std::ifstream(filename);
 	int numPoints = 0;
 	if(in) {
@@ -78,7 +98,7 @@ bool loadControlPoints( std::string filename ) {
 			glm::vec3 point;
 			char waste;
 			if(in >> point.x >> waste >> point.y >> waste >> point.z) {
-				controlPoints.push_back(point);
+				controlCurvePoints.push_back(point);
 			} else {
 				return false;
 			}
@@ -91,7 +111,40 @@ bool loadControlPoints( std::string filename ) {
 	
 }
 
+bool loadControlSurfacePoints( std::string filename ) {
+	std::ifstream in = std::ifstream(filename);
+	int numPatches = 0;
+	if(in) {
+		in >> numPatches;
+		controlSurfacePoints.resize(numPatches);
+		for(int i = 0; i < numPatches; i++){
+			for(int j = 0; j < 16; j++){
+				glm::vec3 point;
+				if(in >> point.x >> point.y >> point.z) {
+					controlSurfacePoints[i].push_back(point);
+					std::cout << point.x << " " << point.y << " " << point.z << std::endl;
+				} else {
+					return false;
+				}
+			}	
+		}
+		return true;
+	} else {
+		return false;
+	}
+	
+}
+
 float getRand() { return rand() / (float)RAND_MAX; }
+
+// evaluateBezierCurve() //////////////////////////////////////////////////////////
+//
+//	Returns a point on the bezier curve
+//
+////////////////////////////////////////////////////////////////////////////////
+glm::vec3 evaluateBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t ) {
+	return (float)pow(1-t, 3) * p0 + 3.0f * (float)pow(1-t, 2) * t * p1 + 3.0f * (1-t) * (float)pow(t,2) * p2 + (float)pow(t, 3) * p3;
+}
 
 // recomputeOrientation() //////////////////////////////////////////////////////
 //
@@ -102,14 +155,94 @@ float getRand() { return rand() / (float)RAND_MAX; }
 ////////////////////////////////////////////////////////////////////////////////
 void recomputeOrientation() {
 	
-	float x = sin(cameraPhi) * sin(cameraTheta);
-	float y = -1 * cos(cameraPhi);
-	float z = -1 * cos(cameraTheta) * sin(cameraPhi);
-	float distance = sqrt((x*x) + (z*z) + (y * y));
-	x /= distance;
-	y /= distance;
-	z /= distance;
-	camPos = camRad * glm::vec3(x, y, z);
+	if(freeCamOn){
+		float r = sinf(freeCameraPhi);
+		freeCamDir = glm::vec3(1*r*sinf(freeCameraTheta), -1*cosf(freeCameraPhi), -1*r*cosf(freeCameraTheta));
+
+		freeCamDir = normalize(freeCamDir);
+		freeCamLookAt = freeCamPos+freeCamDir;
+	}else{
+		float r = sinf(arcCameraPhi);
+		arcCamPos = glm::vec3(1*r*sinf(arcCameraTheta), cosf(arcCameraPhi), -1*r*cosf(arcCameraTheta));
+		arcCamPos = cameraP*normalize(arcCamPos) + dio.pos;
+	}
+}
+
+
+
+void recomputeCarOrientation() {
+
+	dio.dir = glm::vec3(sinf(dio.carTheta), 0, cosf(dio.carTheta));
+
+	float d = 0.01;
+	float x = (dio.pos.x+50)/100;
+	float z = (dio.pos.z+50)/100;
+	glm::vec3 zneg = (evaluateBezierCurve(
+						evaluateBezierCurve(controlSurfacePoints[0][0], controlSurfacePoints[0][1], controlSurfacePoints[0][2], controlSurfacePoints[0][3], x),
+						evaluateBezierCurve(controlSurfacePoints[0][4], controlSurfacePoints[0][5], controlSurfacePoints[0][6], controlSurfacePoints[0][7], x),
+						evaluateBezierCurve(controlSurfacePoints[0][8], controlSurfacePoints[0][9], controlSurfacePoints[0][10], controlSurfacePoints[0][11], x),
+						evaluateBezierCurve(controlSurfacePoints[0][12], controlSurfacePoints[0][13], controlSurfacePoints[0][14], controlSurfacePoints[0][15], x),
+						z-d));
+	glm::vec3 zpos = (evaluateBezierCurve(
+						evaluateBezierCurve(controlSurfacePoints[0][0], controlSurfacePoints[0][1], controlSurfacePoints[0][2], controlSurfacePoints[0][3], x),
+						evaluateBezierCurve(controlSurfacePoints[0][4], controlSurfacePoints[0][5], controlSurfacePoints[0][6], controlSurfacePoints[0][7], x),
+						evaluateBezierCurve(controlSurfacePoints[0][8], controlSurfacePoints[0][9], controlSurfacePoints[0][10], controlSurfacePoints[0][11], x),
+						evaluateBezierCurve(controlSurfacePoints[0][12], controlSurfacePoints[0][13], controlSurfacePoints[0][14], controlSurfacePoints[0][15], x),
+						z+d));
+	glm::vec3 xneg = (evaluateBezierCurve(
+						evaluateBezierCurve(controlSurfacePoints[0][0], controlSurfacePoints[0][1], controlSurfacePoints[0][2], controlSurfacePoints[0][3], x-d),
+						evaluateBezierCurve(controlSurfacePoints[0][4], controlSurfacePoints[0][5], controlSurfacePoints[0][6], controlSurfacePoints[0][7], x-d),
+						evaluateBezierCurve(controlSurfacePoints[0][8], controlSurfacePoints[0][9], controlSurfacePoints[0][10], controlSurfacePoints[0][11], x-d),
+						evaluateBezierCurve(controlSurfacePoints[0][12], controlSurfacePoints[0][13], controlSurfacePoints[0][14], controlSurfacePoints[0][15], x-d),
+						z));
+	glm::vec3 xpos = (evaluateBezierCurve(
+						evaluateBezierCurve(controlSurfacePoints[0][0], controlSurfacePoints[0][1], controlSurfacePoints[0][2], controlSurfacePoints[0][3], x+d),
+						evaluateBezierCurve(controlSurfacePoints[0][4], controlSurfacePoints[0][5], controlSurfacePoints[0][6], controlSurfacePoints[0][7], x+d),
+						evaluateBezierCurve(controlSurfacePoints[0][8], controlSurfacePoints[0][9], controlSurfacePoints[0][10], controlSurfacePoints[0][11], x+d),
+						evaluateBezierCurve(controlSurfacePoints[0][12], controlSurfacePoints[0][13], controlSurfacePoints[0][14], controlSurfacePoints[0][15], x+d),
+						z));
+
+
+
+	glm::vec3 zvec = normalize(zpos-zneg);
+	glm::vec3 xvec = normalize(xpos-xneg);
+	
+	dio.carPitch = acos(glm::dot(normalize(zvec), glm::vec3(0,0,1)));
+	if(zvec.y >0){
+		dio.carPitch = - dio.carPitch;
+	}
+	dio.carRoll = -acos(glm::dot(normalize(xvec), glm::vec3(1,0,0)));
+	
+	if(xvec.y >0){
+		dio.carRoll = - dio.carRoll;
+	}
+	dio.rot = glm::rotate(glm::mat4(1.0f), dio.carRoll, glm::vec3(0,0,1));
+	dio.rot = glm::rotate(dio.rot, dio.carPitch, glm::vec3(1,0,0));
+}
+
+// recomputeAll() //////////////////////////////////////////////////////
+//
+// This function updates the car and camera's position/direction
+// vectors based on any changes made due to movement
+//
+////////////////////////////////////////////////////////////////////////////////
+void recomputeAll(){
+
+	float x = (dio.pos.x+50)/100;
+	float z = (dio.pos.z+50)/100;
+	glm::vec3 point = (evaluateBezierCurve(
+						evaluateBezierCurve(controlSurfacePoints[0][0], controlSurfacePoints[0][1], controlSurfacePoints[0][2], controlSurfacePoints[0][3], x),
+						evaluateBezierCurve(controlSurfacePoints[0][4], controlSurfacePoints[0][5], controlSurfacePoints[0][6], controlSurfacePoints[0][7], x),
+						evaluateBezierCurve(controlSurfacePoints[0][8], controlSurfacePoints[0][9], controlSurfacePoints[0][10], controlSurfacePoints[0][11], x),
+						evaluateBezierCurve(controlSurfacePoints[0][12], controlSurfacePoints[0][13], controlSurfacePoints[0][14], controlSurfacePoints[0][15], x),
+						z));
+	dio.pos.y = point.y;
+	recomputeCarOrientation();
+
+	// recompute both car and camera
+	dio.recompute();
+	recomputeOrientation();
+
 }
 
 // tangentBezierCurve() //////////////////////////////////////////////////////////
@@ -135,24 +268,17 @@ glm::mat4 getRotMatrix(glm::vec3 from, glm::vec3 to) {
     return rot;
 }
 
-// evaluateBezierCurve() //////////////////////////////////////////////////////////
-//
-//	Returns a point on the bezier curve
-//
-////////////////////////////////////////////////////////////////////////////////
-glm::vec3 evaluateBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t ) {
-	return (float)pow(1-t, 3) * p0 + 3.0f * (float)pow(1-t, 2) * t * p1 + 3.0f * (1-t) * (float)pow(t,2) * p2 + (float)pow(t, 3) * p3;
-}
+
 
 void drawTrack();
 
-// renderBezierCurve() //////////////////////////////////////////////////////////
+// renderCoasterCurve() //////////////////////////////////////////////////////////
 //
 // Responsible for drawing a Bezier Curve as defined by four control points.
 //  Breaks the curve into n segments as specified by the resolution.
 //
 ////////////////////////////////////////////////////////////////////////////////
-void renderBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float resolution ) {
+void renderCoasterCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float resolution ) {
 	for(float i = 0.0f; i < 1.0f; i+=resolution){
 		glm::vec3 point = evaluateBezierCurve(p0, p1, p2, p3, i);
 
@@ -182,40 +308,95 @@ static void error_callback( int error, const char* description ) {
 	fprintf( stderr, "[ERROR]: %s\n", description );
 }
 
-//Moves the car and the wheels and checks if ctrl is pressed
+// simply if a button is pressed turn it's related 'switch' on and if released off
 static void keyboard_callback( GLFWwindow *window, int key, int scancode, int action, int mods ) {
-	ctrlPressed = false;
-	if( action == GLFW_PRESS ) {
-		switch( key ) {
-			case GLFW_KEY_ESCAPE:
-			case GLFW_KEY_Q:
-				exit(EXIT_SUCCESS);
-			case GLFW_KEY_W:
-				break;
-			case GLFW_KEY_S:
-				break;
-			case GLFW_KEY_A:
-				break;
-			case GLFW_KEY_D:
-				break;
+	if(freeCamOn){
+		if( action == GLFW_PRESS ) {
+			switch( key ) {
+				case GLFW_KEY_ESCAPE:
+				case GLFW_KEY_Q:
+					exit(EXIT_SUCCESS);
+				case GLFW_KEY_W:
+					freeCamPos+=freeCamSpeed*freeCamDir;
+					break;
+				case GLFW_KEY_S:
+					freeCamPos-=freeCamSpeed*freeCamDir;
+					break;
+				case GLFW_KEY_4:
+					freeCamOn = false;
+					lookAt = &(heroFocus->pos);
+					camPos = &arcCamPos;
+					break;
+			}
 		}
-	}
-	if(action == GLFW_REPEAT){
-		switch(key) {
-			case GLFW_KEY_W:
-				break;
-			case GLFW_KEY_S:
-				break;
-			case GLFW_KEY_A:
-				break;
-			case GLFW_KEY_D:
-				break;
-			case GLFW_KEY_LEFT_CONTROL:
-				ctrlPressed = true;
-				break;
 
+		if( action == GLFW_REPEAT ){
+			switch( key ) {
+				case GLFW_KEY_W:
+					freeCamPos+=freeCamSpeed*freeCamDir;
+					break;
+				case GLFW_KEY_S:
+					freeCamPos-=freeCamSpeed*freeCamDir;
+					break;
+			}
+		}
+	}else{
+		if( action == GLFW_PRESS ) {
+			switch( key ) {
+				case GLFW_KEY_ESCAPE:
+				case GLFW_KEY_Q:
+					exit(EXIT_SUCCESS);
+				case GLFW_KEY_W:
+					dio.moveForward = true;
+					break;
+				case GLFW_KEY_S:
+					dio.moveBack = true;
+					break;
+				case GLFW_KEY_A:
+					dio.turnLeft = true;
+					break;
+				case GLFW_KEY_D:
+					dio.turnRight = true;
+					break;
+				case GLFW_KEY_LEFT_CONTROL:
+					zoomOn = true;
+					break;
+				case GLFW_KEY_4:
+					firstPersonOn = false;
+					freeCamOn = true;
+					lookAt = &freeCamLookAt;
+					camPos = &freeCamPos;
+					break;
+				case GLFW_KEY_5:
+					firstPersonOn = !firstPersonOn;
+					break;
+				
+			}
+		}
+
+		if( action == GLFW_RELEASE ) {
+			switch( key ) {
+				case GLFW_KEY_W:
+					dio.moveForward = false;
+					break;
+				case GLFW_KEY_S:
+					dio.moveBack = false;
+					break;
+				case GLFW_KEY_A:
+					dio.turnLeft = false;
+					break;
+				case GLFW_KEY_D:
+					dio.turnRight = false;
+					break;
+				case GLFW_KEY_LEFT_CONTROL:
+					zoomOn = false;
+					break;
+				
+			}
 		}
 	}
+	
+
 }
 
 // cursor_callback() ///////////////////////////////////////////////////////////
@@ -225,17 +406,38 @@ static void keyboard_callback( GLFWwindow *window, int key, int scancode, int ac
 //      X or Y directions (in screen space) and whether they have held down
 //      the left or right mouse buttons. If the user hasn't held down any
 //      buttons, the function just updates the last seen mouse X and Y coords.
-//		Also zooms in and out if CTRL is pressed
 //
 ////////////////////////////////////////////////////////////////////////////////
 static void cursor_callback( GLFWwindow *window, double x, double y ) {
-	if( leftMouseButton == GLFW_PRESS && !ctrlPressed) {
-		cameraTheta += .005 * (x - mousePos.x);
-		cameraPhi += .005 * (mousePos.y - y);
+
+	if( leftMouseButton == GLFW_PRESS ) {
+		float dx = x-mousePos.x;
+		float dy = y-mousePos.y;
+
+		if(freeCamOn){
+			freeCameraTheta+=0.005*dx;
+			float newPhi = freeCameraPhi-0.005*dy;
+			if(newPhi>=0 && newPhi<=M_PI){
+				freeCameraPhi = newPhi;
+			}
+		}else{
+			// if zooming then dont calculate camera rotation but the distance the camera is from object
+			if(zoomOn){
+				cameraP += zoom*dy;
+				if(cameraP<2){
+					cameraP = 2;
+				}
+			}else{
+				arcCameraTheta+=0.005*dx;
+				float newPhi = arcCameraPhi-0.005*dy;
+				if(newPhi>=0 && newPhi<=M_PI){
+					arcCameraPhi = newPhi;
+				}
+			}
+		}
+		
+			
 		recomputeOrientation();     // update camera (x,y,z) based on (theta,phi)
-	} else if( leftMouseButton == GLFW_PRESS && ctrlPressed){
-		camRad += .05 * (mousePos.y - y);
-		recomputeOrientation();
 	}
 
 	mousePos.x = x;
@@ -315,6 +517,41 @@ void drawCity() {
 
 }
 
+void drawFloor() {
+	std::vector<std::vector<glm::vec3>> floorPoints;
+	
+	glColor3ub(150,150,150);
+	glPointSize(10.0f);
+	for(int i = 0; i < controlSurfacePoints.size(); i++) {
+		for(float t = 0; t <= 1.0f; t+= .01){
+			std::vector<glm::vec3> points;
+			for(float j = 0.0f; j <= 1.0f; j+= .01){
+				points.push_back(evaluateBezierCurve(
+					evaluateBezierCurve(controlSurfacePoints[i][0], controlSurfacePoints[i][1], controlSurfacePoints[i][2], controlSurfacePoints[i][3], j),
+					evaluateBezierCurve(controlSurfacePoints[i][4], controlSurfacePoints[i][5], controlSurfacePoints[i][6], controlSurfacePoints[i][7], j),
+					evaluateBezierCurve(controlSurfacePoints[i][8], controlSurfacePoints[i][9], controlSurfacePoints[i][10], controlSurfacePoints[i][11], j),
+					evaluateBezierCurve(controlSurfacePoints[i][12], controlSurfacePoints[i][13], controlSurfacePoints[i][14], controlSurfacePoints[i][15], j),
+					t));
+			}
+			floorPoints.push_back(points);
+		}
+	}	
+	glDisable(GL_LIGHTING);
+	
+		for(int i = 0; i < floorPoints.size() - 1; i++){
+			glBegin(GL_TRIANGLE_STRIP);
+			for(int j = 0; j < floorPoints[i].size() - 1; j++){
+				glVertex3fv(glm::value_ptr(floorPoints[i][j]));
+				glVertex3fv(glm::value_ptr(floorPoints[i][j+1]));
+				glVertex3fv(glm::value_ptr(floorPoints[i+1][j]));
+				glVertex3fv(glm::value_ptr(floorPoints[i+1][j+1]));
+			}
+			glEnd();
+		}
+	glEnable(GL_LIGHTING);
+
+}
+
 // generateEnvironmentDL() /////////////////////////////////////////////////////
 //
 //  This function creates a display list with the code to draw a simple
@@ -330,7 +567,7 @@ void generateEnvironmentDL() {
 	glNewList(environmentDL, GL_COMPILE);
 		drawGrid();
 		//drawCity();
-
+		drawFloor();
 	glEndList();
 
 }
@@ -353,30 +590,31 @@ void renderScene(void)  {
 	
 		glBegin(GL_LINE_STRIP);
 		glColor3ub(255,255,0);
-		for(int i = 0; i < controlPoints.size(); i++){
+		for(int i = 0; i < controlCurvePoints.size(); i++){
 			
-			glVertex3f(controlPoints[i].x, controlPoints[i].y, controlPoints[i].z);
+			glVertex3f(controlCurvePoints[i].x, controlCurvePoints[i].y, controlCurvePoints[i].z);
 		}
 		glEnd();
 		glEnable(GL_LIGHTING);
 		glColor3ub(0,255,0);
-		for(int i = 0; i < controlPoints.size(); i++){
-			glm::mat4 circTrans = glm::translate( glm::mat4(1.0f), glm::vec3(controlPoints[i].x, controlPoints[i].y, controlPoints[i].z));
+		for(int i = 0; i < controlCurvePoints.size(); i++){
+			glm::mat4 circTrans = glm::translate( glm::mat4(1.0f), glm::vec3(controlCurvePoints[i].x, controlCurvePoints[i].y, controlCurvePoints[i].z));
 			glMultMatrixf( &circTrans[0][0] );
 			CSCI441::drawSolidSphere(.2,10,10);
 			glMultMatrixf( &(glm::inverse( circTrans))[0][0] );
 		}
 		glDisable( GL_LIGHTING);
 	
-		//glColor3ub(0, 0, 255);
-		//glBegin(GL_LINE_STRIP);
 		
-		for(int i = 0; i < controlPoints.size() - 1; i+=4){
-			renderBezierCurve(controlPoints[i], controlPoints[i+1],controlPoints[i+2], controlPoints[i+3], .01f);
+		
+		for(int i = 0; i < controlCurvePoints.size() - 1; i+=4){
+			renderCoasterCurve(controlCurvePoints[i], controlCurvePoints[i+1],controlCurvePoints[i+2], controlCurvePoints[i+3], .01f);
 		}
-		//glEnd();
+		
 	
 	glEnable( GL_LIGHTING );
+
+	dio.Draw();
 }
 
 //*************************************************************************************
@@ -476,15 +714,34 @@ void setupOpenGL() {
 //
 void setupScene() {
 	// give the camera a scenic starting point.
-	camDir.x = 0;
-	camDir.y = 0;
-	camDir.z = 0;
-	cameraTheta = -M_PI / 3.0f;
-	cameraPhi = M_PI / 2.8f;
+	arcCamPos.x = 10;
+	arcCamPos.y = 10;
+	arcCamPos.z = 10;
+	arcCameraTheta = M_PI / 4.0f;
+	arcCameraPhi = M_PI / 4.0f;
+	cameraP = 10;
+	zoom = 0.1;
+
+	freeCamPos.x = 60;
+	freeCamPos.y = 40;
+	freeCamPos.z = 30;
+	freeCameraTheta = -M_PI / 3.0f;
+	freeCameraPhi = M_PI / 2.8f;
+	freeCamSpeed = 0.8;
+
 	recomputeOrientation();
+	heroFocus = &dio;
+	lookAt=&(heroFocus->pos);
+	camPos = &arcCamPos;
 
 	srand( time(NULL) );	// seed our random number generator
 	generateEnvironmentDL();
+}
+
+// set up initial values of the car
+void setupCar() {
+
+	dio = Dio(glm::vec3(0, 0, 0), glm::vec3(0, 0, 1) );
 }
 
 ///*************************************************************************************
@@ -497,14 +754,20 @@ void setupScene() {
 //		Really you should know what this is by now.  We will make use of the parameters later
 //
 int main( int argc, char *argv[] ) {
+
+	std::string file;
+	if(!loadControlSurfacePoints("theWorld.txt")) {
+		std::cerr << "Error code: " << strerror(errno);
+	}
+
+
 	// GLFW sets up our OpenGL context so must be done first
 	GLFWwindow *window = setupGLFW();	// initialize all of the GLFW specific information releated to OpenGL and our window
 	setupOpenGL();										// initialize all of the OpenGL specific information
 	setupScene();											// initialize objects in our scene
-	std::string file;
-	std::cout << "File of control points";
+	std::cout << "File of control points: ";
 	std::cin >> file;
-	if(!loadControlPoints(file)) {
+	if(!loadControlCurvePoints(file)) {
 		std::cerr << "Error code: " << strerror(errno);
 	}
 	//  This is our draw loop - all rendering is done here.  We use a loop to keep the window open
@@ -535,14 +798,39 @@ int main( int argc, char *argv[] ) {
 		glMatrixMode( GL_MODELVIEW );	// make the ModelView matrix current to be modified by any transformations
 		glLoadIdentity();							// set the matrix to be the identity
 
-		// set up our look at matrix to position our camera
-		glm::mat4 viewMtx = glm::lookAt( camPos,		// camera is located at (10, 10, 10)
-										 camDir,	// camera is looking at (0, 0, 0,)
+// set up our look at matrix to position our camera
+		// TODO #6: Change how our lookAt matrix gets constructed
+		glm::mat4 viewMtx = glm::lookAt( *camPos,		// camera is located at (10, 10, 10)
+										 *lookAt,		// camera is looking at (0, 0, 0,)
 										 glm::vec3(  0,  1,  0 ) );		// up vector is (0, 1, 0) - positive Y
 		// multiply by the look at matrix - this is the same as our view martix
 		glMultMatrixf( &viewMtx[0][0] );
-		
+
+
+
+
+		recomputeAll();
 		renderScene();					// draw everything to the window
+
+		if(firstPersonOn){
+			glMultMatrixf( &(glm::inverse( viewMtx ))[0][0] );
+			glm::vec3 heroPos = heroFocus->pos;
+			glm::vec3 heroDir = heroFocus->dir;
+			heroPos.y +=3;
+
+			glm::mat4 viewMtx = glm::lookAt( heroPos,		// camera is located at (10, 10, 10)
+										 	 heroPos+normalize(heroDir),		// camera is looking at (0, 0, 0,)
+										 	 glm::vec3(  0,  1,  0 ) );		// up vector is (0, 1, 0) - positive Y
+			// multiply by the look at matrix - this is the same as our view martix
+			glMultMatrixf( &viewMtx[0][0] );
+
+			glViewport(10, framebufferHeight-framebufferHeight/4-10, framebufferWidth/4, framebufferHeight/4 );
+			glScissor(10-1, framebufferHeight-framebufferHeight/4-10-1, framebufferWidth/4+2, framebufferHeight/4+2 );
+			glEnable(GL_SCISSOR_TEST);
+			glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+			renderScene();
+			glDisable(GL_SCISSOR_TEST);
+		}
 
 		glfwSwapBuffers(window);// flush the OpenGL commands and make sure they get rendered!
 		glfwPollEvents();				// check for any events and signal to redraw screen

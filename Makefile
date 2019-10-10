@@ -22,7 +22,7 @@
 ########################################
 
 TARGET = RollerCoasterTycoon
-OBJECTS = main.o
+OBJECTS = main.o hero.o dio.o
 
 LOCAL_INC_PATH = include
 LOCAL_LIB_PATH = lib
@@ -121,3 +121,5 @@ $(TARGET): $(OBJECTS)
 
 # DEPENDENCIES
 main.o: main.cpp
+hero.o: hero.cpp
+dio.o: dio.cpp
