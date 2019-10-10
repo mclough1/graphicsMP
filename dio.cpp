@@ -202,44 +202,4 @@ void Dio::Draw(){
 
 void Dio::recompute(){
 	
-
-	// flip the rotation direction if going backwards since thats how cars work
-	if(turnRight){
-		if(moveBack&&!moveForward){
-			carTheta+=turnSpeed;
-		}else{
-			carTheta-=turnSpeed;
-			
-		}
-	}
-	if(turnLeft){
-		if(moveBack&&!moveForward){
-			carTheta-=turnSpeed;
-		}else{
-			carTheta+=turnSpeed;
-		}
-	}
-
-	dir = glm::vec3(sinf(carTheta), 0, cosf(carTheta));
-
-	if(moveForward){
-		pos+=dir*speed;
-		wheelTurn+=0.06;
-	}
-	if(moveBack){
-		pos-=dir*speed;
-		wheelTurn-=0.06;
-	}
-	//keep road roller within bounds of grid
-	if(pos.x<-50){
-		pos.x = -50;
-	}else if(pos.x>50){
-		pos.x = 50;
-	}
-	if(pos.z<-50){
-		pos.z = -50;
-	}else if(pos.z>50){
-		pos.z = 50;
-	}
-	
 }

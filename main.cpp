@@ -37,6 +37,8 @@
 #include <vector>
 #include "hero.h"
 #include "dio.h"
+#include "HankHill.h"
+#include "torvesta.h"
 
 //*************************************************************************************
 //
@@ -78,6 +80,8 @@ std::vector<glm::vec3> controlCurvePoints;
 GLuint environmentDL;                       		// display list for the 'city'
 
 Dio dio;
+HankHill hank;
+Torvesta torvesta;
 
 //*************************************************************************************
 //
@@ -164,7 +168,7 @@ void recomputeOrientation() {
 	}else{
 		float r = sinf(arcCameraPhi);
 		arcCamPos = glm::vec3(1*r*sinf(arcCameraTheta), cosf(arcCameraPhi), -1*r*cosf(arcCameraTheta));
-		arcCamPos = cameraP*normalize(arcCamPos) + dio.pos;
+		arcCamPos = cameraP*normalize(arcCamPos) + torvesta.pos;
 	}
 }
 
@@ -172,11 +176,11 @@ void recomputeOrientation() {
 
 void recomputeCarOrientation() {
 
-	dio.dir = glm::vec3(sinf(dio.carTheta), 0, cosf(dio.carTheta));
+	torvesta.dir = glm::vec3(sinf(torvesta.heroAngle), 0, cosf(torvesta.heroAngle));
 
 	float d = 0.01;
-	float x = (dio.pos.x+50)/100;
-	float z = (dio.pos.z+50)/100;
+	float x = (torvesta.pos.x+50)/100;
+	float z = (torvesta.pos.z+50)/100;
 	glm::vec3 zneg = (evaluateBezierCurve(
 						evaluateBezierCurve(controlSurfacePoints[0][0], controlSurfacePoints[0][1], controlSurfacePoints[0][2], controlSurfacePoints[0][3], x),
 						evaluateBezierCurve(controlSurfacePoints[0][4], controlSurfacePoints[0][5], controlSurfacePoints[0][6], controlSurfacePoints[0][7], x),
@@ -207,17 +211,17 @@ void recomputeCarOrientation() {
 	glm::vec3 zvec = normalize(zpos-zneg);
 	glm::vec3 xvec = normalize(xpos-xneg);
 	
-	dio.carPitch = acos(glm::dot(normalize(zvec), glm::vec3(0,0,1)));
+	torvesta.pitch = acos(glm::dot(normalize(zvec), glm::vec3(0,0,1)));
 	if(zvec.y >0){
-		dio.carPitch = - dio.carPitch;
+		torvesta.pitch = - torvesta.pitch;
 	}
-	dio.carRoll = -acos(glm::dot(normalize(xvec), glm::vec3(1,0,0)));
+	torvesta.roll = -acos(glm::dot(normalize(xvec), glm::vec3(1,0,0)));
 	
 	if(xvec.y >0){
-		dio.carRoll = - dio.carRoll;
+		torvesta.roll = - torvesta.roll;
 	}
-	dio.rot = glm::rotate(glm::mat4(1.0f), dio.carRoll, glm::vec3(0,0,1));
-	dio.rot = glm::rotate(dio.rot, dio.carPitch, glm::vec3(1,0,0));
+	torvesta.rot = glm::rotate(glm::mat4(1.0f), torvesta.roll, glm::vec3(0,0,1));
+	torvesta.rot = glm::rotate(torvesta.rot, torvesta.pitch, glm::vec3(1,0,0));
 }
 
 // recomputeAll() //////////////////////////////////////////////////////
@@ -228,19 +232,19 @@ void recomputeCarOrientation() {
 ////////////////////////////////////////////////////////////////////////////////
 void recomputeAll(){
 
-	float x = (dio.pos.x+50)/100;
-	float z = (dio.pos.z+50)/100;
+	float x = (torvesta.pos.x+50)/100;
+	float z = (torvesta.pos.z+50)/100;
 	glm::vec3 point = (evaluateBezierCurve(
 						evaluateBezierCurve(controlSurfacePoints[0][0], controlSurfacePoints[0][1], controlSurfacePoints[0][2], controlSurfacePoints[0][3], x),
 						evaluateBezierCurve(controlSurfacePoints[0][4], controlSurfacePoints[0][5], controlSurfacePoints[0][6], controlSurfacePoints[0][7], x),
 						evaluateBezierCurve(controlSurfacePoints[0][8], controlSurfacePoints[0][9], controlSurfacePoints[0][10], controlSurfacePoints[0][11], x),
 						evaluateBezierCurve(controlSurfacePoints[0][12], controlSurfacePoints[0][13], controlSurfacePoints[0][14], controlSurfacePoints[0][15], x),
 						z));
-	dio.pos.y = point.y;
+	torvesta.pos.y = point.y;
 	recomputeCarOrientation();
 
 	// recompute both car and camera
-	dio.recompute();
+	torvesta.recompute();
 	recomputeOrientation();
 
 }
@@ -347,16 +351,16 @@ static void keyboard_callback( GLFWwindow *window, int key, int scancode, int ac
 				case GLFW_KEY_Q:
 					exit(EXIT_SUCCESS);
 				case GLFW_KEY_W:
-					dio.moveForward = true;
+					torvesta.moveForward = true;
 					break;
 				case GLFW_KEY_S:
-					dio.moveBack = true;
+					torvesta.moveBack = true;
 					break;
 				case GLFW_KEY_A:
-					dio.turnLeft = true;
+					torvesta.turnLeft = true;
 					break;
 				case GLFW_KEY_D:
-					dio.turnRight = true;
+					torvesta.turnRight = true;
 					break;
 				case GLFW_KEY_LEFT_CONTROL:
 					zoomOn = true;
@@ -377,16 +381,16 @@ static void keyboard_callback( GLFWwindow *window, int key, int scancode, int ac
 		if( action == GLFW_RELEASE ) {
 			switch( key ) {
 				case GLFW_KEY_W:
-					dio.moveForward = false;
+					torvesta.moveForward = false;
 					break;
 				case GLFW_KEY_S:
-					dio.moveBack = false;
+					torvesta.moveBack = false;
 					break;
 				case GLFW_KEY_A:
-					dio.turnLeft = false;
+					torvesta.turnLeft = false;
 					break;
 				case GLFW_KEY_D:
-					dio.turnRight = false;
+					torvesta.turnRight = false;
 					break;
 				case GLFW_KEY_LEFT_CONTROL:
 					zoomOn = false;
@@ -615,6 +619,8 @@ void renderScene(void)  {
 	glEnable( GL_LIGHTING );
 
 	dio.Draw();
+	hank.Draw();
+	torvesta.Draw();
 }
 
 //*************************************************************************************
@@ -730,7 +736,7 @@ void setupScene() {
 	freeCamSpeed = 0.8;
 
 	recomputeOrientation();
-	heroFocus = &dio;
+	heroFocus = &torvesta;
 	lookAt=&(heroFocus->pos);
 	camPos = &arcCamPos;
 
@@ -742,6 +748,8 @@ void setupScene() {
 void setupCar() {
 
 	dio = Dio(glm::vec3(0, 0, 0), glm::vec3(0, 0, 1) );
+	hank = HankHill(glm::vec3(0, 0, 0), glm::vec3(0, 0, 1) );
+	torvesta = Torvesta(glm::vec3(0, 1, 0), glm::vec3(0, 0, 1) );
 }
 
 ///*************************************************************************************

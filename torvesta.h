@@ -11,8 +11,8 @@
  *
  */
 
-#ifndef DIO_H
-#define DIO_H
+#ifndef TORVESTA_H
+#define TORVESTA_H
 
 // include the OpenGL library header
 #ifdef __APPLE__					// if compiling on Mac OS
@@ -44,6 +44,17 @@ class Torvesta : public Hero {
 	public:
 		float heroAngle = 0;
 		bool walking = false;
+		float idle = 0.05;
+		int wait = 0;
+
+		float turnSpeed = 0.02;
+		float speed = 0.5;
+		float scale = 1;
+		bool moveForward = false, moveBack = false, turnRight = false, turnLeft = false;
+		glm::vec3 norm = glm::vec3(0,1,0);
+		glm::mat4 rot = glm::mat4(1.0f);
+		float pitch = 0;
+		float roll = 0;
 
 		Torvesta(){
 			pos = glm::vec3(0,0,0);
@@ -62,6 +73,8 @@ class Torvesta : public Hero {
 		void drawHead();
 		void drawHat();
 		void drawCharacter();
+		void Draw();
+		void recompute();
 	
 
 };

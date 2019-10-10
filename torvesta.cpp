@@ -126,12 +126,70 @@ void Torvesta::drawCharacter() {
 	}
 }
 
-void Torvesta::draw() {
-	glm::mat4 rotMtx = glm::rotate(glm::mat4(1.0f), heroAngle, glm::vec3(0, 1, 0));
-	glm::mat4 transMtx1 = glm::translate(glm::mat4(1.0f), glm::vec3(pos.x, pos.y, pos.z));
-	glMultMatrixf( &transMtx1[0][0] );
-	glMultMatrixf( &rotMtx[0][0] );
-	drawCharacter();
-	glMultMatrixf( &( glm::inverse( rotMtx ) )[0][0] );
-	glMultMatrixf( &( glm::inverse( transMtx1 ) )[0][0] );
+void Torvesta::Draw() {
+	// glm::mat4 rotMtx = glm::rotate(glm::mat4(1.0f), heroAngle, glm::vec3(0, 1, 0));
+	// glm::mat4 transMtx1 = glm::translate(glm::mat4(1.0f), glm::vec3(pos.x, pos.y, pos.z));
+	// glm::mat4 scaleMtx = glm::scale( glm::mat4(1.0f), glm::vec3( scale, scale, scale ) );
+	// glMultMatrixf( &transMtx1[0][0] );
+	// glMultMatrixf( &rotMtx[0][0] );
+	// glMultMatrixf( &scaleMtx[0][0] );
+	// drawCharacter();
+	// glMultMatrixf( &( glm::inverse( scaleMtx ) )[0][0] );
+	// glMultMatrixf( &( glm::inverse( rotMtx ) )[0][0] );
+	// glMultMatrixf( &( glm::inverse( transMtx1 ) )[0][0] );
+
+	glm::mat4 transMtx = glm::translate( glm::mat4(1.0f), glm::vec3(pos.x, pos.y, pos.z ));
+	glMultMatrixf( &transMtx[0][0] ); {
+		glMultMatrixf( &rot[0][0] ); {
+			glm::mat4 heroMtx = glm::rotate(glm::mat4(1.0f), heroAngle, norm);
+			heroMtx = glm::scale( heroMtx, glm::vec3( scale, scale, scale ) );
+			glMultMatrixf( &heroMtx[0][0] ); {
+			
+			
+				drawCharacter();
+			}; glMultMatrixf( &(glm::inverse( heroMtx ))[0][0] );
+		}; glMultMatrixf( &(glm::inverse( rot ))[0][0] );
+	}; glMultMatrixf( &(glm::inverse( transMtx ))[0][0] );
+}
+
+void Torvesta::recompute(){
+	// flip the rotation direction if going backwards since thats how cars work
+	if(turnRight){
+		if(moveBack&&!moveForward){
+			heroAngle+=turnSpeed;
+		}else{
+			heroAngle-=turnSpeed;
+			
+		}
+	}
+	if(turnLeft){
+		if(moveBack&&!moveForward){
+			heroAngle-=turnSpeed;
+		}else{
+			heroAngle+=turnSpeed;
+		}
+	}
+
+	dir = glm::vec3(sinf(heroAngle), 0, cosf(heroAngle));
+
+	if(moveForward){
+		walking = true;
+		pos+=dir*speed;
+	}else if(moveBack){
+		walking = true;
+		pos-=dir*speed;
+	}else{
+		walking = false;
+	}
+	//keep road roller within bounds of grid
+	if(pos.x<-50){
+		pos.x = -50;
+	}else if(pos.x>50){
+		pos.x = 50;
+	}
+	if(pos.z<-50){
+		pos.z = -50;
+	}else if(pos.z>50){
+		pos.z = 50;
+	}
 }
