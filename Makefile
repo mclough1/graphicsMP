@@ -27,7 +27,7 @@ OBJECTS = main.o hero.o dio.o HankHill.o torvesta.o
 LOCAL_INC_PATH = include
 LOCAL_LIB_PATH = lib
 
-BUILDING_IN_LAB = 0
+BUILDING_IN_LAB = 1
 
 #########################################################################################
 #########################################################################################
