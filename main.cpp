@@ -116,6 +116,7 @@ bool loadFile(std::string filename) {
             for(int j = 0; j < 16; j++){
                 glm::vec3 point;
                 if(in >> point.x >> comma >> point.y >> comma >> point.z) {
+					cout<<point.x<<" "<<point.y<<" "<<point.z<<endl;
                     controlSurfacePoints[i].push_back(point);
                 } else {
                     return false;
@@ -146,8 +147,10 @@ bool loadFile(std::string filename) {
             glMultMatrixf( &transMtx[0][0] );
 
             if (type.compare("CUBE")) {
+				cout<<"cube"<<endl;
                 CSCI441::drawSolidCube(size);
             } else if (type.compare("SPHERE")) {
+				cout<<"sphere"<<endl;
                 CSCI441::drawSolidSphere(size, 50, 50);
             }
 
@@ -156,6 +159,7 @@ bool loadFile(std::string filename) {
 
         }
         glEndList();
+		return true;
 
 
     } else {
@@ -321,6 +325,8 @@ void recomputeDioLocation(){
 	dio.pos = evaluateBezierCurve(controlCurvePoints[curve], controlCurvePoints[curve+1], controlCurvePoints[curve+2], controlCurvePoints[curve+3], time);
 	dio.rot = getRotMatrix(glm::vec3(0,0,1), tangentBezierCurve(controlCurvePoints[curve], controlCurvePoints[curve+1], controlCurvePoints[curve+2], controlCurvePoints[curve+3], time));
 	dio.dir = tangentBezierCurve(controlCurvePoints[curve], controlCurvePoints[curve+1], controlCurvePoints[curve+2], controlCurvePoints[curve+3], time);
+
+	dio.wheelTurn+=dio.turnSpeed;
 }
 
 void recomputeHankLocation(){
@@ -636,7 +642,6 @@ void drawFloor() {
 	std::vector<std::vector<glm::vec3>> floorPoints;
 	
 	glColor3ub(150,150,150);
-	glPointSize(10.0f);
 	for(int i = 0; i < (int)controlSurfacePoints.size(); i++) {
 		for(float t = 0; t <= 1.0f; t+= .01){
 			std::vector<glm::vec3> points;
@@ -854,7 +859,7 @@ void setupScene() {
 	camPos = &arcCamPos;
 
 	srand( time(NULL) );	// seed our random number generator
-	generateEnvironmentDL();
+	
 }
 
 // set up initial values of the car
@@ -877,21 +882,24 @@ void setupHeroes() {
 //
 int main( int argc, char *argv[] ) {
 
-	std::string file;
-
+	
 	// GLFW sets up our OpenGL context so must be done first
 	GLFWwindow *window = setupGLFW();	// initialize all of the GLFW specific information releated to OpenGL and our window
 	setupOpenGL();										// initialize all of the OpenGL specific information
 	setupScene();											// initialize objects in our scene
 	setupHeroes();
+
+	std::string file;
 	char filename[] = {};
 	cout<< "Enter Filename: ";
-	cin >> filename;
-	if(loadFile(filename)){
+	cin >> file;
+	if(loadFile(file)){
 		loadDt();
 	}else{
 		cerr << "Error code: " << strerror(errno);
 	}
+	generateEnvironmentDL();
+	
 	//  This is our draw loop - all rendering is done here.  We use a loop to keep the window open
 	//	until the user decides to close the window and quit the program.  Without a loop, the
 	//	window will display once and then the program exits.
