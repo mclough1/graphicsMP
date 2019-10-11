@@ -1,4 +1,4 @@
-Land Name / Land Members
+﻿Land Name / Land Members
 	King of Jojo's Bizzare Scape - Torvesta, Dio, Hank Hill
 	
 Assignment Number / Project Title
@@ -11,14 +11,21 @@ A brief, high level description of what the program is / does
 	
 A usage section, explaining how to run the program, which keys perform which actions, etc.
 	ESC/Q - quit
-	WASD + arrow keys - move character
-	# - change camera
-	#
-	#
-	#
+	
+	WASD - move character
+	WS - move freecam
+	1 - focus on Torvesta
+	2 - focus on Dio
+	3 - focus on Hank Hill
+	4 - swap freecam/arcball
+	5 - toggle first person (freecam mode turns this off)
+
+	LCTRL + click and drag - zoom
 	
 Instructions on compiling your code
-	type make run
+	type make run, possibly edit makefile
+	once running enter world file name
+	there are two example files are sample1.world and sample2.world
 	
 NEW: A description of the file format that your program reads as input
 	<number of Bézier Surfaces for ground>

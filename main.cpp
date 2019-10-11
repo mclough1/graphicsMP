@@ -641,7 +641,7 @@ void drawCity() {
 void drawFloor() {
 	std::vector<std::vector<glm::vec3>> floorPoints;
 	
-	glColor3ub(150,150,150);
+	glColor3ub(26,151,240);
 	for(int i = 0; i < (int)controlSurfacePoints.size(); i++) {
 		for(float t = 0; t <= 1.0f; t+= .01){
 			std::vector<glm::vec3> points;
@@ -709,25 +709,8 @@ void renderScene(void)  {
 	glCallList(environmentDL);
 	glCallList(objectsDL);
 	
-		glBegin(GL_LINE_STRIP);
-		glColor3ub(255,255,0);
-		for(int i = 0; i < (int)controlCurvePoints.size(); i++){
-			
-			glVertex3f(controlCurvePoints[i].x, controlCurvePoints[i].y, controlCurvePoints[i].z);
-		}
-		glEnd();
-		glEnable(GL_LIGHTING);
-		glColor3ub(0,255,0);
-		for(int i = 0; i<(int)controlCurvePoints.size(); i++){
-			glm::mat4 circTrans = glm::translate( glm::mat4(1.0f), glm::vec3(controlCurvePoints[i].x, controlCurvePoints[i].y, controlCurvePoints[i].z));
-			glMultMatrixf( &circTrans[0][0] );
-			CSCI441::drawSolidSphere(.2,10,10);
-			glMultMatrixf( &(glm::inverse( circTrans))[0][0] );
-		}
+		
 		glDisable( GL_LIGHTING);
-	
-		
-		
 		for(int i = 0; (i+3)<(int)controlCurvePoints.size(); i+=3){
 			renderCoasterCurve(controlCurvePoints[i], controlCurvePoints[i+1],controlCurvePoints[i+2], controlCurvePoints[i+3], .01f);
 		}
@@ -890,7 +873,6 @@ int main( int argc, char *argv[] ) {
 	setupHeroes();
 
 	std::string file;
-	char filename[] = {};
 	cout<< "Enter Filename: ";
 	cin >> file;
 	if(loadFile(file)){
