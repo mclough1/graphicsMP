@@ -29,6 +29,8 @@ class HankHill : public Hero {
 	public:
 		
 		float teapotScale = 1.0f, teapotScaleFactor = .01f;
+		glm::vec3 norm = glm::vec3(0,1,0);
+		glm::mat4 rot = glm::mat4(1.0f);
 
 		HankHill(){
 			pos = glm::vec3(0,0,0);

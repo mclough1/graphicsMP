@@ -188,11 +188,8 @@ void Dio::Draw(){
 	glm::mat4 carTrans = glm::translate( glm::mat4(1.0f), glm::vec3(pos.x, 4*scale+pos.y, pos.z ));
 	glMultMatrixf( &carTrans[0][0] ); {
 		glMultMatrixf( &rot[0][0] ); {
-			glm::mat4 carMtx = glm::rotate(glm::mat4(1.0f), carTheta, norm);
-			carMtx = glm::scale( carMtx, glm::vec3( scale, scale, scale ) );
+			glm::mat4 carMtx = glm::scale( glm::mat4(1.0f), glm::vec3( scale, scale, scale ) );
 			glMultMatrixf( &carMtx[0][0] ); {
-			
-			
 				drawRoadRoller();
 			}; glMultMatrixf( &(glm::inverse( carMtx ))[0][0] );
 		}; glMultMatrixf( &(glm::inverse( rot ))[0][0] );

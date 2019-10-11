@@ -97,7 +97,14 @@ void HankHill::Draw() {
 	
 	glMultMatrixf( &trans[0][0] );
 	//glMultMatrixf( &rotateMtx[0][0] );
-		drawCar();
+		glMultMatrixf( &rot[0][0] ); {
+			glm::mat4 carMtx = glm::scale( glm::mat4(1.0f), glm::vec3( 3.0f, 3.0f, 3.0f ) );
+			glMultMatrixf( &carMtx[0][0] ); {
+				drawCar();
+			}; glMultMatrixf( &(glm::inverse( carMtx ))[0][0] );
+			
+		}; glMultMatrixf( &(glm::inverse( rot ))[0][0] );
+		
 	//glMultMatrixf( &(glm::inverse( rotateMtx))[0][0] );
 	glMultMatrixf( &(glm::inverse( trans))[0][0] );
 }

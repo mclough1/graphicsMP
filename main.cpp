@@ -75,7 +75,14 @@ bool zoomOn = false;								// true if zoom mode is on
 
 vector<vector<glm::vec3>> controlSurfacePoints;
 
-std::vector<glm::vec3> controlCurvePoints;
+vector<glm::vec3> controlCurvePoints;
+
+float dioDist = 0.0;
+float dioSpeed = 0.1;
+float hankDist = 0.0;
+float hankSpeed = 0.01;
+
+vector<float> bezDists, bezTimes;
 
 GLuint environmentDL;                       		// display list for the 'city'
 
@@ -96,26 +103,34 @@ Hero* heroes[] = {&torvesta, &dio, &hank};
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-bool loadControlCurvePoints( std::string filename ) {
-	std::ifstream in = std::ifstream(filename);
-	int numPoints = 0;
-	if(in) {
-		in >> numPoints;
-		for(int i = 0; i < numPoints; i++){
-			glm::vec3 point;
-			char waste;
-			if(in >> point.x >> waste >> point.y >> waste >> point.z) {
-				controlCurvePoints.push_back(point);
-			} else {
-				return false;
-			}
-		}
-		
-		return true;
-	} else {
+bool loadControlCurvePoints( char* filename ) {
+
+
+	fstream infile = fstream(filename);
+
+	if(!infile){
 		return false;
 	}
+
+	string strline;
+	getline(infile, strline);
+	int lines = stoi(strline);
 	
+	while(lines > 0){
+		getline(infile, strline);
+		int comma = strline.find(',');
+		string x, y, z;
+		x = strline.substr(0,comma);
+		y = strline.substr(comma+1);
+		comma = y.find(',');
+		z = y.substr(comma+1);
+		y = y.substr(0,comma);
+		cout<<x<<" "<<y<<" "<<z<<endl;
+		controlCurvePoints.push_back(glm::vec3(stof(x), stof(y), stof(z)));
+		lines--;
+	}
+	
+	return true;
 }
 
 bool loadControlSurfacePoints( std::string filename ) {
@@ -153,6 +168,46 @@ glm::vec3 evaluateBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::ve
 	return (float)pow(1-t, 3) * p0 + 3.0f * (float)pow(1-t, 2) * t * p1 + 3.0f * (1-t) * (float)pow(t,2) * p2 + (float)pow(t, 3) * p3;
 }
 
+// tangentBezierCurve() //////////////////////////////////////////////////////////
+//
+//	Returns the tangent at a point on the curve
+//
+////////////////////////////////////////////////////////////////////////////////
+glm::vec3 tangentBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t ) {
+    return normalize(-3.0f * (float)pow(1-t, 2) * p0 + 3.0f * (float)pow(1-t, 2) * p1 - 6.0f * t * (1-t) * p1 - 3.0f * (float)pow(t, 2) * p2 + 6.0f * t * (1-t) * p2 + 3.0f * (float)pow(t, 2) * p3);
+}
+
+void loadDt(){
+	glm::vec3 point = controlCurvePoints[0];
+	glm::vec3 prevpoint = point;
+	float distSum = 0;
+	// for each curve and then each segment of curve generate a poin to put in our chart
+	//chart is made up of times, which each curve spans a time of 1 (unit) and distances from the original point
+	for( int i = 0; (i+3)<(int)controlCurvePoints.size(); i+=3){
+		for(float t=0.0; t<1; t += 1.0/20){
+			point = evaluateBezierCurve(controlCurvePoints[i], controlCurvePoints[i+1], controlCurvePoints[i+2], controlCurvePoints[i+3], t);
+			distSum += distance(point, prevpoint);
+			bezDists.push_back(distSum);
+			bezTimes.push_back(t+i/3);
+			prevpoint = point;
+		}
+	}
+}
+
+// getRotMatrix() //////////////////////////////////////////////////////////
+//
+//	Returns the rotation matrix between two vectors
+//
+////////////////////////////////////////////////////////////////////////////////
+glm::mat4 getRotMatrix(glm::vec3 from, glm::vec3 to) {
+    glm::vec3 axis = glm::normalize(glm::cross(from, to));
+
+    float angle = acos(glm::dot(normalize(from), normalize(to))); //this is wrong
+	glm::mat4 rot = glm::rotate(glm::mat4(1.0f), angle, axis);
+
+    return rot;
+}
+
 // recomputeOrientation() //////////////////////////////////////////////////////
 //
 // This function updates the camera's direction in cartesian coordinates based
@@ -171,7 +226,7 @@ void recomputeOrientation() {
 	}else{
 		float r = sinf(arcCameraPhi);
 		arcCamPos = glm::vec3(1*r*sinf(arcCameraTheta), cosf(arcCameraPhi), -1*r*cosf(arcCameraTheta));
-		arcCamPos = cameraP*normalize(arcCamPos) + torvesta.pos;
+		arcCamPos = cameraP*normalize(arcCamPos) + heroFocus->pos;
 	}
 }
 
@@ -227,6 +282,58 @@ void recomputeCarOrientation() {
 	torvesta.rot = glm::rotate(torvesta.rot, torvesta.pitch, glm::vec3(1,0,0));
 }
 
+// recomputeSpriteLocation() //////////////////////////////////////////////////////
+//
+// This function updates the sprite's location on the loaded bezier curve
+//
+////////////////////////////////////////////////////////////////////////////////
+void recomputeDioLocation(){
+	dioDist += dioSpeed;
+	dioDist = fmod(dioDist, bezDists.back());
+
+	float time = 0.0;
+	int index = 0;
+	// find the lower bound of the location of the sprite
+	while(bezDists[index]<dioDist){
+		index++;
+	}
+
+	// if it is at the distance then send back respective time otherwise calculate time
+	if(bezDists[index]<dioDist){
+		time = bezTimes[index];
+	}else{
+		time = (dioDist-bezDists[index])/(bezDists[index+1]-bezDists[index])*(bezTimes[index+1]-bezTimes[index])+bezTimes[index];
+	}
+
+	//curve that we are on which is time truncated since each curve is 1 (unit) time
+	int curve = int(time);
+	// time on the specific curve
+	time -= curve;
+	// index of the first control point of the curve
+	curve = curve*3;
+	//evaluate and set sprite location to the place
+	dio.pos = evaluateBezierCurve(controlCurvePoints[curve], controlCurvePoints[curve+1], controlCurvePoints[curve+2], controlCurvePoints[curve+3], time);
+	dio.rot = getRotMatrix(glm::vec3(0,0,1), tangentBezierCurve(controlCurvePoints[curve], controlCurvePoints[curve+1], controlCurvePoints[curve+2], controlCurvePoints[curve+3], time));
+	dio.dir = tangentBezierCurve(controlCurvePoints[curve], controlCurvePoints[curve+1], controlCurvePoints[curve+2], controlCurvePoints[curve+3], time);
+}
+
+void recomputeHankLocation(){
+	hankDist += hankSpeed;
+	if (hankDist >= (controlCurvePoints.size()-1)/3) {
+		hankDist -= (controlCurvePoints.size()-1)/3;
+	}
+	//curve that we are on which is time truncated since each curve is 1 (unit) time
+	int curve = int(hankDist);
+	// time on the specific curve
+	float time = hankDist-curve;
+	// index of the first control point of the curve
+	curve = curve*3;
+	//evaluate and set sprite location to the place
+	hank.pos = evaluateBezierCurve(controlCurvePoints[curve], controlCurvePoints[curve+1], controlCurvePoints[curve+2], controlCurvePoints[curve+3], time);
+	hank.rot = getRotMatrix(glm::vec3(1,0,0), tangentBezierCurve(controlCurvePoints[curve], controlCurvePoints[curve+1], controlCurvePoints[curve+2], controlCurvePoints[curve+3], time));
+	hank.dir = tangentBezierCurve(controlCurvePoints[curve], controlCurvePoints[curve+1], controlCurvePoints[curve+2], controlCurvePoints[curve+3], time);
+}
+
 // recomputeAll() //////////////////////////////////////////////////////
 //
 // This function updates the car and camera's position/direction
@@ -248,32 +355,15 @@ void recomputeAll(){
 
 	// recompute both car and camera
 	torvesta.recompute();
+	recomputeDioLocation();
+	recomputeHankLocation();
 	recomputeOrientation();
 
 }
 
-// tangentBezierCurve() //////////////////////////////////////////////////////////
-//
-//	Returns the tangent at a point on the curve
-//
-////////////////////////////////////////////////////////////////////////////////
-glm::vec3 tangentBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t ) {
-    return -3.0f * (float)pow(1-t, 2) * p0 + 3.0f * (float)pow(1-t, 2) * p1 - 6.0f * t * (1-t) * p1 - 3.0f * (float)pow(t, 2) * p2 + 6.0f * t * (1-t) * p2 + 3.0f * (float)pow(t, 2) * p3;
-}
 
-// getRotMatrix() //////////////////////////////////////////////////////////
-//
-//	Returns the rotation matrix between two vectors
-//
-////////////////////////////////////////////////////////////////////////////////
-glm::mat4 getRotMatrix(glm::vec3 from, glm::vec3 to) {
-    glm::vec3 axis = glm::normalize(glm::cross(from, to));
 
-    float angle = acos(glm::dot(normalize(from), normalize(to))); //this is wrong
-	glm::mat4 rot = glm::rotate(glm::mat4(1.0f), angle, axis);
 
-    return rot;
-}
 
 
 
@@ -367,12 +457,15 @@ static void keyboard_callback( GLFWwindow *window, int key, int scancode, int ac
 					break;
 				case GLFW_KEY_1:
 					heroFocus = heroes[0];
+					lookAt=&(heroFocus->pos);
 					break;
 				case GLFW_KEY_2:
 					heroFocus = heroes[1];
+					lookAt=&(heroFocus->pos);
 					break;
 				case GLFW_KEY_3:
 					heroFocus = heroes[2];
+					lookAt=&(heroFocus->pos);
 					break;
 				case GLFW_KEY_LEFT_CONTROL:
 					zoomOn = true;
@@ -538,7 +631,7 @@ void drawFloor() {
 	
 	glColor3ub(150,150,150);
 	glPointSize(10.0f);
-	for(int i = 0; i < controlSurfacePoints.size(); i++) {
+	for(int i = 0; i < (int)controlSurfacePoints.size(); i++) {
 		for(float t = 0; t <= 1.0f; t+= .01){
 			std::vector<glm::vec3> points;
 			for(float j = 0.0f; j <= 1.0f; j+= .01){
@@ -554,9 +647,9 @@ void drawFloor() {
 	}	
 	glDisable(GL_LIGHTING);
 	
-		for(int i = 0; i < floorPoints.size() - 1; i++){
+		for(int i = 0; i < (int)floorPoints.size() - 1; i++){
 			glBegin(GL_TRIANGLE_STRIP);
-			for(int j = 0; j < floorPoints[i].size() - 1; j++){
+			for(int j = 0; j < (int)floorPoints[i].size() - 1; j++){
 				glVertex3fv(glm::value_ptr(floorPoints[i][j]));
 				glVertex3fv(glm::value_ptr(floorPoints[i][j+1]));
 				glVertex3fv(glm::value_ptr(floorPoints[i+1][j]));
@@ -606,14 +699,14 @@ void renderScene(void)  {
 	
 		glBegin(GL_LINE_STRIP);
 		glColor3ub(255,255,0);
-		for(int i = 0; i < controlCurvePoints.size(); i++){
+		for(int i = 0; i < (int)controlCurvePoints.size(); i++){
 			
 			glVertex3f(controlCurvePoints[i].x, controlCurvePoints[i].y, controlCurvePoints[i].z);
 		}
 		glEnd();
 		glEnable(GL_LIGHTING);
 		glColor3ub(0,255,0);
-		for(int i = 0; i < controlCurvePoints.size(); i++){
+		for(int i = 0; i<(int)controlCurvePoints.size(); i++){
 			glm::mat4 circTrans = glm::translate( glm::mat4(1.0f), glm::vec3(controlCurvePoints[i].x, controlCurvePoints[i].y, controlCurvePoints[i].z));
 			glMultMatrixf( &circTrans[0][0] );
 			CSCI441::drawSolidSphere(.2,10,10);
@@ -623,7 +716,7 @@ void renderScene(void)  {
 	
 		
 		
-		for(int i = 0; i < controlCurvePoints.size() - 1; i+=4){
+		for(int i = 0; (i+3)<(int)controlCurvePoints.size(); i+=3){
 			renderCoasterCurve(controlCurvePoints[i], controlCurvePoints[i+1],controlCurvePoints[i+2], controlCurvePoints[i+3], .01f);
 		}
 		
@@ -788,10 +881,13 @@ int main( int argc, char *argv[] ) {
 	setupOpenGL();										// initialize all of the OpenGL specific information
 	setupScene();											// initialize objects in our scene
 	setupHeroes();
-	std::cout << "File of control points: ";
-	std::cin >> file;
-	if(!loadControlCurvePoints(file)) {
-		std::cerr << "Error code: " << strerror(errno);
+	char filename[] = {};
+	cout<< "Enter Filename: ";
+	cin >> filename;
+	if(loadControlCurvePoints(filename)){
+		loadDt();
+	}else{
+		cerr << "Error code: " << strerror(errno);
 	}
 	//  This is our draw loop - all rendering is done here.  We use a loop to keep the window open
 	//	until the user decides to close the window and quit the program.  Without a loop, the
