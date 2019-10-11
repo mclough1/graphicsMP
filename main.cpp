@@ -85,6 +85,7 @@ float hankSpeed = 0.01;
 vector<float> bezDists, bezTimes;
 
 GLuint environmentDL;                       		// display list for the 'city'
+GLuint objectsDL;
 
 Dio dio;
 HankHill hank;
@@ -103,58 +104,63 @@ Hero* heroes[] = {&torvesta, &dio, &hank};
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-bool loadControlCurvePoints( char* filename ) {
+bool loadFile(std::string filename) {
+    std::ifstream in = std::ifstream(filename);
+    int numPoints, numPatches, numObjects;
+    char comma; //trash commas
+
+    if (in) {
+        in >> numPatches;
+        controlSurfacePoints.resize(numPatches);
+        for(int i = 0; i < numPatches; i++){
+            for(int j = 0; j < 16; j++){
+                glm::vec3 point;
+                if(in >> point.x >> comma >> point.y >> comma >> point.z) {
+                    controlSurfacePoints[i].push_back(point);
+                } else {
+                    return false;
+                }
+            }
+        }
+
+        in >> numPoints;
+        for(int i = 0; i < numPoints; i++){
+            glm::vec3 point;
+            if(in >> point.x >> comma >> point.y >> comma >> point.z) {
+                controlCurvePoints.push_back(point);
+            } else {
+                return false;
+            }
+        }
+
+        in >> numObjects;
+        objectsDL = glGenLists(1);
+        glNewList(objectsDL, GL_COMPILE);
+        for(int i = 0; i < numObjects; i++){
+            std::string type;
+            glm::vec3 pos;
+            int size;
+            in >> type >> pos.x >> comma >> pos.y >> comma >> pos.z >>  size;
+
+            glm::mat4 transMtx = glm::translate(glm::mat4(1.0f), pos);
+            glMultMatrixf( &transMtx[0][0] );
+
+            if (type.compare("CUBE")) {
+                CSCI441::drawSolidCube(size);
+            } else if (type.compare("SPHERE")) {
+                CSCI441::drawSolidSphere(size, 50, 50);
+            }
+
+            glMultMatrixf( &( glm::inverse( transMtx ) )[0][0] );
 
 
-	fstream infile = fstream(filename);
+        }
+        glEndList();
 
-	if(!infile){
-		return false;
-	}
 
-	string strline;
-	getline(infile, strline);
-	int lines = stoi(strline);
-	
-	while(lines > 0){
-		getline(infile, strline);
-		int comma = strline.find(',');
-		string x, y, z;
-		x = strline.substr(0,comma);
-		y = strline.substr(comma+1);
-		comma = y.find(',');
-		z = y.substr(comma+1);
-		y = y.substr(0,comma);
-		cout<<x<<" "<<y<<" "<<z<<endl;
-		controlCurvePoints.push_back(glm::vec3(stof(x), stof(y), stof(z)));
-		lines--;
-	}
-	
-	return true;
-}
-
-bool loadControlSurfacePoints( std::string filename ) {
-	std::ifstream in = std::ifstream(filename);
-	int numPatches = 0;
-	if(in) {
-		in >> numPatches;
-		controlSurfacePoints.resize(numPatches);
-		for(int i = 0; i < numPatches; i++){
-			for(int j = 0; j < 16; j++){
-				glm::vec3 point;
-				if(in >> point.x >> point.y >> point.z) {
-					controlSurfacePoints[i].push_back(point);
-					std::cout << point.x << " " << point.y << " " << point.z << std::endl;
-				} else {
-					return false;
-				}
-			}	
-		}
-		return true;
-	} else {
-		return false;
-	}
-	
+    } else {
+        return false;
+    }
 }
 
 float getRand() { return rand() / (float)RAND_MAX; }
@@ -696,6 +702,7 @@ void drawTrack() {
 //
 void renderScene(void)  {
 	glCallList(environmentDL);
+	glCallList(objectsDL);
 	
 		glBegin(GL_LINE_STRIP);
 		glColor3ub(255,255,0);
@@ -871,10 +878,6 @@ void setupHeroes() {
 int main( int argc, char *argv[] ) {
 
 	std::string file;
-	if(!loadControlSurfacePoints("theWorld.txt")) {
-		std::cerr << "Error code: " << strerror(errno);
-	}
-
 
 	// GLFW sets up our OpenGL context so must be done first
 	GLFWwindow *window = setupGLFW();	// initialize all of the GLFW specific information releated to OpenGL and our window
@@ -884,7 +887,7 @@ int main( int argc, char *argv[] ) {
 	char filename[] = {};
 	cout<< "Enter Filename: ";
 	cin >> filename;
-	if(loadControlCurvePoints(filename)){
+	if(loadFile(filename)){
 		loadDt();
 	}else{
 		cerr << "Error code: " << strerror(errno);
