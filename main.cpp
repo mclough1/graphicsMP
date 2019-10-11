@@ -83,6 +83,9 @@ Dio dio;
 HankHill hank;
 Torvesta torvesta;
 
+Hero* heroes[] = {&torvesta, &dio, &hank};
+
+
 //*************************************************************************************
 //
 // Helper Functions
@@ -361,6 +364,15 @@ static void keyboard_callback( GLFWwindow *window, int key, int scancode, int ac
 					break;
 				case GLFW_KEY_D:
 					torvesta.turnRight = true;
+					break;
+				case GLFW_KEY_1:
+					heroFocus = heroes[0];
+					break;
+				case GLFW_KEY_2:
+					heroFocus = heroes[1];
+					break;
+				case GLFW_KEY_3:
+					heroFocus = heroes[2];
 					break;
 				case GLFW_KEY_LEFT_CONTROL:
 					zoomOn = true;
@@ -735,8 +747,9 @@ void setupScene() {
 	freeCameraPhi = M_PI / 2.8f;
 	freeCamSpeed = 0.8;
 
-	recomputeOrientation();
 	heroFocus = &torvesta;
+	recomputeOrientation();
+	
 	lookAt=&(heroFocus->pos);
 	camPos = &arcCamPos;
 
@@ -745,11 +758,12 @@ void setupScene() {
 }
 
 // set up initial values of the car
-void setupCar() {
+void setupHeroes() {
 
 	dio = Dio(glm::vec3(0, 0, 0), glm::vec3(0, 0, 1) );
 	hank = HankHill(glm::vec3(0, 0, 0), glm::vec3(0, 0, 1) );
 	torvesta = Torvesta(glm::vec3(0, 1, 0), glm::vec3(0, 0, 1) );
+	
 }
 
 ///*************************************************************************************
@@ -773,6 +787,7 @@ int main( int argc, char *argv[] ) {
 	GLFWwindow *window = setupGLFW();	// initialize all of the GLFW specific information releated to OpenGL and our window
 	setupOpenGL();										// initialize all of the OpenGL specific information
 	setupScene();											// initialize objects in our scene
+	setupHeroes();
 	std::cout << "File of control points: ";
 	std::cin >> file;
 	if(!loadControlCurvePoints(file)) {
@@ -824,10 +839,12 @@ int main( int argc, char *argv[] ) {
 			glMultMatrixf( &(glm::inverse( viewMtx ))[0][0] );
 			glm::vec3 heroPos = heroFocus->pos;
 			glm::vec3 heroDir = heroFocus->dir;
-			heroPos.y +=3;
+			heroPos.y +=4;
 
-			glm::mat4 viewMtx = glm::lookAt( heroPos,		// camera is located at (10, 10, 10)
-										 	 heroPos+normalize(heroDir),		// camera is looking at (0, 0, 0,)
+			
+
+			glm::mat4 viewMtx = glm::lookAt( heroPos+0.7f*normalize(heroDir),		// camera is located at (10, 10, 10)
+										 	 heroPos+2.0f*normalize(heroDir),		// camera is looking at (0, 0, 0,)
 										 	 glm::vec3(  0,  1,  0 ) );		// up vector is (0, 1, 0) - positive Y
 			// multiply by the look at matrix - this is the same as our view martix
 			glMultMatrixf( &viewMtx[0][0] );
